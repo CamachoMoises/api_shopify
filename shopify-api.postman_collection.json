@@ -1,0 +1,242 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-g7h8-i9j0-k1l2m3n4o5p6",
+		"name": "Shopify API",
+		"description": "Collection for Shopify API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Products",
+			"item": [
+				{
+					"name": "Create Products in Bulk",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"products\": [\n    {\n      \"title\": \"Test Product\",\n      \"description\": \"This is a test product\",\n      \"vendor\": \"Test Vendor\",\n      \"type\": \"Test Type\",\n      \"variants\": [\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"TEST123\"\n        }\n      ],\n      \"images\": [\n        {\n          \"src\": \"https://example.com/image.jpg\"\n        }\n      ],\n      \"tags\": \"test, product\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "bulk"]
+						}
+					}
+				},
+				{
+					"name": "Update Products in Bulk",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"products\": [\n    {\n      \"id\": \"123456789\",\n      \"title\": \"Updated Product\",\n      \"description\": \"Updated description\",\n      \"vendor\": \"Updated Vendor\",\n      \"type\": \"Updated Type\",\n      \"images\": [\n        {\n          \"src\": \"https://example.com/new-image.jpg\"\n        }\n      ],\n      \"tags\": \"updated, product\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "bulk"]
+						}
+					}
+				},
+				{
+					"name": "Update Prices in Bulk",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"updates\": [\n    {\n      \"variant_id\": \"987654321\",\n      \"price\": \"29.99\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/prices/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "prices", "bulk"]
+						}
+					}
+				},
+				{
+					"name": "Disable Products in Bulk",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_ids\": [\"123456789\", \"987654321\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/disable/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "disable", "bulk"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Inventory",
+			"item": [
+				{
+					"name": "Update Inventory in Bulk",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"updates\": [\n    {\n      \"location_id\": \"123456789\",\n      \"inventory_item_id\": \"987654321\",\n      \"quantity\": 100\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/inventory/bulk",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "inventory", "bulk"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Orders",
+			"item": [
+				{
+					"name": "Get Orders",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/orders?status=any&limit=50&financial_status=pending",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "orders"],
+							"query": [
+								{
+									"key": "status",
+									"value": "any"
+								},
+								{
+									"key": "limit",
+									"value": "50"
+								},
+								{
+									"key": "financial_status",
+									"value": "pending"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Order by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/orders?id=123456789",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "orders"],
+							"query": [
+								{
+									"key": "id",
+									"value": "123456789"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Order by Order Number",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/orders?order_number=1001",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "orders"],
+							"query": [
+								{
+									"key": "order_number",
+									"value": "1001"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Mark Order as Paid",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"order_id\": \"123456789\",\n  \"payment_details\": {\n    \"amount\": \"99.99\",\n    \"currency\": \"USD\",\n    \"gateway\": \"external\",\n    \"message\": \"Payment processed via external system\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/orders/123456789/mark-paid",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "orders", "123456789", "mark-paid"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Customers",
+			"item": [
+				{
+					"name": "Get Customers",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/customers?limit=50",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "customers"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "50"
+								}
+							]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000"
+		}
+	]
+} 

@@ -1,0 +1,409 @@
+{
+	"info": {
+		"_postman_id": "b1c2d3e4-f5g6-h7i8-j9k0-l1m2n3o4p5q6",
+		"name": "Vendor API",
+		"description": "Collection for Vendor API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Products",
+			"item": [
+				{
+					"name": "Create Products",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"vendor_id\": \"VENDOR123\",\n  \"products\": [\n    {\n      \"title\": \"Camiseta Básica\",\n      \"description\": \"Camiseta de algodón 100% con diseño minimalista\",\n      \"category\": \"Ropa\",\n      \"options\": [\n        {\n          \"name\": \"Color\",\n          \"values\": [\"Negro\", \"Blanco\"]\n        },\n        {\n          \"name\": \"Talla\",\n          \"values\": [\"S\", \"M\", \"L\"]\n        }\n      ],\n      \"variants\": [\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"TSH-BLK-S\",\n          \"option1\": \"Negro\",\n          \"option2\": \"S\"\n        },\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"TSH-BLK-M\",\n          \"option1\": \"Negro\",\n          \"option2\": \"M\"\n        },\n        {\n          \"price\": \"21.99\",\n          \"sku\": \"TSH-WHT-S\",\n          \"option1\": \"Blanco\",\n          \"option2\": \"S\"\n        },\n        {\n          \"price\": \"21.99\",\n          \"sku\": \"TSH-WHT-M\",\n          \"option1\": \"Blanco\",\n          \"option2\": \"M\"\n        }\n      ],\n      \"images\": [\n        {\n          \"url\": \"https://ejemplo.com/camiseta-negra.jpg\",\n          \"position\": 1,\n          \"variant_ids\": [\"TSH-BLK-S\", \"TSH-BLK-M\"]\n        },\n        {\n          \"url\": \"https://ejemplo.com/camiseta-blanca.jpg\",\n          \"position\": 2,\n          \"variant_ids\": [\"TSH-WHT-S\", \"TSH-WHT-M\"]\n        }\n      ],\n      \"tags\": [\"camisetas\", \"básicas\", \"algodón\"]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/vendor/products",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "vendor", "products"]
+						}
+					}
+				},
+				{
+					"name": "Update Products",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"vendor_id\": \"VENDOR123\",\n  \"updates\": [\n    {\n      \"shopify_product_id\": \"123456789\",\n      \"name\": \"Updated Product Name\",\n      \"description\": \"Updated Description\",\n      \"category\": \"Updated Category\",\n      \"images\": [\n        {\n          \"url\": \"https://example.com/new-image.jpg\"\n        }\n      ],\n      \"tags\": [\"updated\", \"tags\"]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/vendor/products",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "vendor", "products"]
+						}
+					}
+				},
+				{
+					"name": "Query Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/vendor/products/query?product_ids=123456789,987654321",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "vendor", "products", "query"],
+							"query": [
+								{
+									"key": "product_ids",
+									"value": "123456789,987654321"
+								}
+							]
+						},
+						"description": "Consulta uno o varios productos por sus IDs, mostrando todos los datos relacionados al producto y sus variantes."
+					}
+				},
+				{
+					"name": "Create Products (GraphQL)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"products\": [\n    {\n      \"title\": \"Camiseta Básica\",\n      \"description\": \"Camiseta de algodón 100% con diseño minimalista\",\n      \"category\": \"Ropa\",\n      \"vendor\": \"VENDOR123\",\n      \"options\": [\n        {\n          \"name\": \"Color\",\n          \"values\": [\"Negro\", \"Blanco\"]\n        },\n        {\n          \"name\": \"Talla\",\n          \"values\": [\"S\", \"M\", \"L\"]\n        }\n      ],\n      \"variants\": [\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"TSH-BLK-S\",\n          \"option1\": \"Negro\",\n          \"option2\": \"S\"\n        },\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"TSH-BLK-M\",\n          \"option1\": \"Negro\",\n          \"option2\": \"M\"\n        },\n        {\n          \"price\": \"21.99\",\n          \"sku\": \"TSH-WHT-S\",\n          \"option1\": \"Blanco\",\n          \"option2\": \"S\"\n        },\n        {\n          \"price\": \"21.99\",\n          \"sku\": \"TSH-WHT-M\",\n          \"option1\": \"Blanco\",\n          \"option2\": \"M\"\n        }\n      ],\n      \"images\": [\n        {\n          \"url\": \"https://ejemplo.com/camiseta-negra.jpg\",\n          \"alt\": \"Camiseta Negra\",\n          \"variant_ids\": [\"TSH-BLK-S\", \"TSH-BLK-M\"]\n        },\n        {\n          \"url\": \"https://ejemplo.com/camiseta-blanca.jpg\",\n          \"alt\": \"Camiseta Blanca\",\n          \"variant_ids\": [\"TSH-WHT-S\", \"TSH-WHT-M\"]\n        }\n      ],\n      \"tags\": [\"camisetas\", \"básicas\", \"algodón\"]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/graphql/create",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "graphql", "create"]
+						},
+						"description": "Crea productos usando la API GraphQL de Shopify"
+					}
+				},
+				{
+					"name": "Update Variant Prices (GraphQL)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"price_updates\": [\n    {\n      \"shopify_variant_id\": \"987654321\",\n      \"compare_at_price\": 39.99\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/prices/graphql",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "prices", "graphql"]
+						},
+						"description": "Actualiza los precios de comparación de las variantes usando GraphQL"
+					}
+				},
+				{
+					"name": "Delete Product (GraphQL)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"gid://shopify/Product/123456789\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/graphql/delete",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "graphql", "delete"]
+						},
+						"description": "Elimina un producto usando la API GraphQL de Shopify"
+					}
+				},
+				{
+					"name": "Create Product with Variants and Images",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"products\": [\n    {\n      \"title\": \"Producto de Ejemplo\",\n      \"description\": \"Descripción detallada del producto\",\n      \"vendor\": \"VENDOR123\",\n      \"category\": \"Categoría\",\n      \"variants\": [\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"SKU123\",\n          \"option1\": \"Rojo\",\n          \"option2\": \"Grande\"\n        },\n        {\n          \"price\": \"19.99\",\n          \"sku\": \"SKU124\",\n          \"option1\": \"Azul\",\n          \"option2\": \"Mediano\"\n        }\n      ],\n      \"options\": [\n        {\n          \"name\": \"Color\",\n          \"values\": [\"Rojo\", \"Azul\"]\n        },\n        {\n          \"name\": \"Tamaño\",\n          \"values\": [\"Grande\", \"Mediano\"]\n        }\n      ],\n      \"images\": [\n        {\n          \"url\": \"https://ejemplo.com/imagen1.webp\",\n          \"alt\": \"Imagen 1\",\n          \"variantIndex\": 0\n        },\n        {\n          \"url\": \"https://ejemplo.com/imagen2.webp\",\n          \"alt\": \"Imagen 2\",\n          \"variantIndex\": 1\n        },\n        {\n          \"url\": \"https://ejemplo.com/imagen3.webp\",\n          \"alt\": \"Imagen principal\"\n        }\n      ],\n      \"tags\": [\"nuevo\", \"destacado\"]\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/products/create",
+							"host": ["{{base_url}}"],
+							"path": ["api", "products", "create"]
+						},
+						"description": "Crea un nuevo producto con variantes e imágenes asociadas en Shopify"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Product with Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product\": {\n    \"title\": \"Jarrón Decorativo\",\n    \"description\": \"Jarrón decorativo de cerámica\",\n    \"vendor\": \"VENDOR123\",\n    \"category\": \"Decoración\",\n    \"options\": [\"Color\"],\n    \"images\": [\n      {\n        \"url\": \"https://ejemplo.com/jarron-beige.jpg\",\n        \"alt\": \"Jarrón Beige\"\n      },\n      {\n        \"url\": \"https://ejemplo.com/jarron-verde.jpg\",\n        \"alt\": \"Jarrón Verde\"\n      }\n    ],\n    \"variants\": [\n      {\n        \"price\": \"49.99\",\n        \"sku\": \"JAR-BEI\",\n        \"options\": [\"Beige\"],\n        \"imageUrls\": [\"https://ejemplo.com/jarron-beige.jpg\"]\n      },\n      {\n        \"price\": \"49.99\",\n        \"sku\": \"JAR-VER\",\n        \"options\": [\"Verde\"],\n        \"imageUrls\": [\"https://ejemplo.com/jarron-verde.jpg\"]\n      }\n    ],\n    \"tags\": [\"decoración\", \"cerámica\", \"jarrón\"]\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/products/graphql/create-with-media",
+							"host": ["{{base_url}}"],
+							"path": ["api", "products", "graphql", "create-with-media"]
+						},
+						"description": "Crea un producto con sus variantes e imágenes en una sola operación"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Variant Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"variant_id\": \"gid://shopify/ProductVariant/1234567890\",\n    \"images\": [\n        {\n            \"url\": \"https://example.com/image.jpg\",\n            \"alt\": \"Image description\"\n        }\n    ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/products/variant/update-media",
+							"host": ["{{base_url}}"],
+							"path": ["api", "products", "variant", "update-media"]
+						},
+						"description": "Actualiza o elimina las imágenes de una variante de producto. Para eliminar todas las imágenes, envía un array vacío."
+					}
+				},
+				{
+					"name": "Delete Variant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"variant_id\": \"gid://shopify/ProductVariant/1234567890\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/products/variant/delete",
+							"host": ["{{base_url}}"],
+							"path": ["api", "products", "variant", "delete"]
+						},
+						"description": "Elimina una variante de producto específica."
+					}
+				},
+				{
+					"name": "Create Variant",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"123456789\",\n  \"variant\": {\n    \"price\": \"29.99\",\n    \"sku\": \"TSH-BLK-L\",\n    \"option1\": \"Negro\",\n    \"option2\": \"L\",\n    \"inventory_quantity\": 10\n  },\n  \"images\": [\n    {\n      \"url\": \"https://ejemplo.com/camiseta-negra-l.jpg\",\n      \"alt\": \"Camiseta Negra Talla L\",\n      \"position\": 1\n    },\n    {\n      \"url\": \"https://ejemplo.com/camiseta-negra-l-detalle.jpg\",\n      \"alt\": \"Detalle de la Camiseta Negra Talla L\",\n      \"position\": 2\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/variant",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "variant"]
+						},
+						"description": "Crea una nueva variante para un producto existente y le asocia imágenes"
+					}
+				},
+				{
+					"name": "Create Variant (GraphQL)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"gid://shopify/Product/123456789\",\n  \"variant\": {\n    \"price\": \"29.99\",\n    \"sku\": \"TSH-BLK-L\",\n    \"option1\": \"Negro\",\n    \"option2\": \"L\",\n    \"inventory_quantity\": 10\n  },\n  \"images\": [\n    {\n      \"url\": \"https://ejemplo.com/camiseta-negra-l.jpg\",\n      \"alt\": \"Camiseta Negra Talla L\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/variant/graphql",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "variant", "graphql"]
+						},
+						"description": "Crea una nueva variante usando GraphQL. Maneja automáticamente productos sin variantes existentes."
+					}
+				},
+				{
+					"name": "Create Product Full Flow (GraphQL)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"media\": [\n    {\n      \"mediaContentType\": \"IMAGE\",\n      \"originalSource\": \"https://res.cloudinary.com/intranetjoy/image/upload/intranet/010404020089.webp\",\n      \"alt\": \"Jarrón Beige\"\n    },\n    {\n      \"mediaContentType\": \"IMAGE\",\n      \"originalSource\": \"https://res.cloudinary.com/intranetjoy/image/upload/intranet/010404020088.webp\",\n      \"alt\": \"Jarrón Verde\"\n    }\n  ],\n  \"input\": {\n    \"title\": \"PRUEBA\",\n    \"descriptionHtml\": \"prueba de carga\",\n    \"vendor\": \"VENDOR123\",\n    \"productType\": \"Decoración\",\n    \"options\": [\n      \"Color\"\n    ],\n    \"variants\": [\n      {\n        \"price\": \"49.99\",\n        \"sku\": \"JAR-BEI\",\n        \"inventoryManagement\": \"SHOPIFY\",\n        \"inventoryPolicy\": \"DENY\",\n        \"options\": [\n          \"Beige\"\n        ],\n        \"mediaSrc\": [\n          \"https://res.cloudinary.com/intranetjoy/image/upload/intranet/010404020089.webp\"\n        ]\n      },\n      {\n        \"price\": \"49.99\",\n        \"sku\": \"JAR-VER\",\n        \"inventoryManagement\": \"SHOPIFY\",\n        \"inventoryPolicy\": \"DENY\",\n        \"options\": [\n          \"Verde\"\n        ],\n        \"mediaSrc\": [\n          \"https://res.cloudinary.com/intranetjoy/image/upload/intranet/010404020088.webp\"\n        ]\n      }\n    ],\n    \"status\": \"ACTIVE\",\n    \"tags\": [\n      \"decoración\",\n      \"cerámica\",\n      \"jarrón\"\n    ],\n    \"published\": true\n  }\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/graphql/create-full",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "graphql", "create-full"]
+						},
+						"description": "Crea un producto completo con medios y variantes usando el flujo correcto de Shopify 2024-10. Evita el error 'Field is not defined on ProductInput' al separar la creación en pasos: 1) Crear producto, 2) Crear medios, 3) Crear variantes, 4) Vincular medios a variantes."
+					}
+				}
+			]
+		},
+		{
+			"name": "Prices",
+			"item": [
+				{
+					"name": "Update Prices",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"price_updates\": [\n    {\n      \"shopify_variant_id\": \"987654321\",\n      \"new_price\": 29.99\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/vendor/prices",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "vendor", "prices"]
+						}
+					}
+				},
+				{
+					"name": "Update Compare At Prices (GraphQL)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"price_updates\": [\n    {\n      \"shopify_variant_id\": \"987654321\",\n      \"compare_at_price\": 39.99\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/products/prices/graphql",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "products", "prices", "graphql"]
+						},
+						"description": "Actualiza los precios de comparación (compare_at_price) de las variantes de productos usando GraphQL"
+					}
+				}
+			]
+		},
+		{
+			"name": "Inventory",
+			"item": [
+				{
+					"name": "Update Inventory (GraphQL)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"inventory_updates\": [\n    {\n      \"shopify_location_id\": \"81549426943\",\n      \"shopify_inventory_item_id\": \"48844024119551\",\n      \"quantity\": 100\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/inventory/graphql",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "inventory", "graphql"]
+						},
+						"description": "Actualiza el inventario de productos usando GraphQL"
+					}
+				}
+			]
+		},
+		{
+			"name": "Product Status",
+			"item": [
+				{
+					"name": "Disable Products",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"disable_requests\": [\n    {\n      \"shopify_product_id\": \"123456789\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/vendor/products/disable",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "vendor", "products", "disable"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:3000"
+		}
+	]
+} 
