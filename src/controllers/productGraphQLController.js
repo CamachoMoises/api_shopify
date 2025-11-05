@@ -1018,197 +1018,510 @@ const updateVariantMedia = async (req, res) => {
 
 // Delete variant
 const deleteVariant = async (req, res) => {
+	console.log('Eliminar');
+	const axios = require('axios');
+	const shopUrl = process.env.SHOPIFY_SHOP_URL.replace(
+		/^https?:\/\//,
+		''
+	);
+
+	// Configuración de rate limiting
+	const REQUESTS_PER_SECOND = 35;
+	const DELAY_BETWEEN_REQUESTS = Math.ceil(
+		1000 / REQUESTS_PER_SECOND
+	);
+
 	try {
 		const { variant_id } = req.body;
-
-		if (!variant_id) {
+		const variants = [{ variant_id: variant_id }];
+		console.log('Variants to delete:', variants);
+		if (!Array.isArray(variants) || variants.length === 0) {
 			return res.status(400).json({
 				success: false,
-				error: 'Variant ID is required',
+				error:
+					'Se requiere un array de variants con al menos un elemento',
 			});
 		}
 
-		// Asegurar que el ID tenga el formato correcto
-		const formattedVariantId = variant_id.startsWith('gid://')
-			? variant_id
-			: `gid://shopify/ProductVariant/${variant_id}`;
+		console.log(`\n=== ELIMINANDO VARIANTES ===`);
+		console.log(`Total de variantes a eliminar: ${variants.length}`);
 
-		// Primero obtener la variante y sus imágenes
-		const getVariantQuery = `
-      query getVariant($id: ID!) {
-        productVariant(id: $id) {
-          id
-          product {
-            id
-          }
-          media(first: 10) {
-            edges {
-              node {
-                ... on MediaImage {
-                  id
-                  image {
-                    id
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
+		const results = [];
+		const errors = [];
+		const sleep = (ms) =>
+			new Promise((resolve) => setTimeout(resolve, ms));
 
-		console.log('Getting variant with ID:', formattedVariantId);
+		for (let i = 0; i < variants.length; i++) {
+			const variantData = variants[i];
+			const variantGid = variantData.variant_id;
 
-		const getVariantResponse = await graphqlClient.query({
-			data: {
-				query: getVariantQuery,
-				variables: {
-					id: formattedVariantId,
-				},
-			},
-		});
-
-		console.log(
-			'Get Variant Response:',
-			JSON.stringify(getVariantResponse.body, null, 2)
-		);
-
-		if (getVariantResponse.body.errors) {
-			throw new Error(
-				`Error getting variant: ${JSON.stringify(
-					getVariantResponse.body.errors
-				)}`
-			);
-		}
-
-		if (!getVariantResponse.body.data?.productVariant) {
-			throw new Error('Variant not found');
-		}
-
-		const variant = getVariantResponse.body.data.productVariant;
-
-		// Eliminar las imágenes asociadas a la variante
-		if (variant.media.edges.length > 0) {
-			const deleteMediaMutation = `
-        mutation productDeleteMedia($mediaIds: [ID!]!, $productId: ID!) {
-          productDeleteMedia(mediaIds: $mediaIds, productId: $productId) {
-            deletedMediaIds
-            userErrors {
-              field
-              message
-            }
-          }
-        }
-      `;
-
-			const mediaIds = variant.media.edges.map(
-				(edge) => edge.node.id
-			);
-
-			console.log('Deleting media with IDs:', mediaIds);
-
-			const deleteMediaResponse = await graphqlClient.query({
-				data: {
-					query: deleteMediaMutation,
-					variables: {
-						mediaIds: mediaIds,
-						productId: variant.product.id,
-					},
-				},
-			});
-
-			console.log(
-				'Delete Media Response:',
-				JSON.stringify(deleteMediaResponse.body, null, 2)
-			);
-
-			if (deleteMediaResponse.body.errors) {
-				throw new Error(
-					`Error deleting media: ${JSON.stringify(
-						deleteMediaResponse.body.errors
-					)}`
-				);
-			}
-
+			// Validar formato del GID
 			if (
-				deleteMediaResponse.body.data?.productDeleteMedia?.userErrors
-					?.length > 0
+				!variantGid ||
+				!variantGid.startsWith('gid://shopify/ProductVariant/')
 			) {
-				throw new Error(
-					`Error deleting media: ${JSON.stringify(
-						deleteMediaResponse.body.data.productDeleteMedia
-							.userErrors
-					)}`
+				errors.push({
+					index: i,
+					variant_id: variantGid,
+					error:
+						'Formato de variant_id inválido. Debe ser gid://shopify/ProductVariant/XXXXXX',
+				});
+				continue;
+			}
+
+			// Extraer ID numérico del GID
+			const variantId = variantGid.replace(
+				'gid://shopify/ProductVariant/',
+				''
+			);
+
+			try {
+				console.log(
+					`\n[${i + 1}/${variants.length}] Procesando variante:`
 				);
+				console.log(`  - Variant ID: ${variantId}`);
+
+				// PASO 1: Obtener información de la variante antes de eliminarla
+				const getVariantUrl = `https://${shopUrl}/admin/api/2024-10/variants/${variantId}.json`;
+				let variantInfo = null;
+				let imageIdToDelete = null;
+				let productId = null;
+
+				try {
+					const variantResp = await axios.get(getVariantUrl, {
+						headers: {
+							'X-Shopify-Access-Token':
+								process.env.SHOPIFY_ACCESS_TOKEN,
+							'Content-Type': 'application/json',
+						},
+					});
+
+					variantInfo = variantResp.data.variant;
+					imageIdToDelete = variantInfo.image_id;
+					productId = variantInfo.product_id;
+
+					console.log(`  - Product ID: ${productId}`);
+					console.log(`  - SKU: ${variantInfo.sku}`);
+					console.log(
+						`  - Image ID: ${imageIdToDelete || 'ninguna'}`
+					);
+
+					await sleep(DELAY_BETWEEN_REQUESTS);
+				} catch (getError) {
+					console.error(
+						`  ✗ Error obteniendo información de la variante:`,
+						getError.response?.data || getError.message
+					);
+					throw new Error(
+						'No se pudo obtener información de la variante'
+					);
+				}
+
+				// PASO 2: Verificar que no sea la única variante del producto
+				const getProductUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}.json?fields=id,variants`;
+
+				try {
+					const productResp = await axios.get(getProductUrl, {
+						headers: {
+							'X-Shopify-Access-Token':
+								process.env.SHOPIFY_ACCESS_TOKEN,
+							'Content-Type': 'application/json',
+						},
+					});
+
+					const totalVariants =
+						productResp.data.product.variants?.length || 0;
+
+					if (totalVariants <= 1) {
+						errors.push({
+							index: i,
+							variant_id: variantGid,
+							product_id: productId,
+							sku: variantInfo.sku,
+							error:
+								'No se puede eliminar la única variante del producto. Elimine el producto completo en su lugar.',
+						});
+						console.log(
+							`  ⚠ No se puede eliminar: es la única variante`
+						);
+						continue;
+					}
+
+					console.log(
+						`  - Total de variantes en producto: ${totalVariants}`
+					);
+					await sleep(DELAY_BETWEEN_REQUESTS);
+				} catch (productError) {
+					console.error(
+						`  ✗ Error verificando producto:`,
+						productError.response?.data || productError.message
+					);
+				}
+
+				// PASO 3: Eliminar la variante
+				const deleteVariantUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}/variants/${variantId}.json`;
+
+				try {
+					await axios.delete(deleteVariantUrl, {
+						headers: {
+							'X-Shopify-Access-Token':
+								process.env.SHOPIFY_ACCESS_TOKEN,
+						},
+					});
+
+					console.log(`  ✓ Variante eliminada`);
+					await sleep(DELAY_BETWEEN_REQUESTS);
+				} catch (deleteError) {
+					throw new Error(
+						`Error eliminando variante: ${
+							deleteError.response?.data?.errors ||
+							deleteError.message
+						}`
+					);
+				}
+
+				// PASO 4: Verificar si la imagen está siendo usada por otras variantes
+				let imageDeleted = false;
+				if (imageIdToDelete && productId) {
+					try {
+						// Obtener todas las variantes restantes del producto
+						const remainingVariantsUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}/variants.json`;
+						const remainingResp = await axios.get(
+							remainingVariantsUrl,
+							{
+								headers: {
+									'X-Shopify-Access-Token':
+										process.env.SHOPIFY_ACCESS_TOKEN,
+									'Content-Type': 'application/json',
+								},
+							}
+						);
+
+						const remainingVariants =
+							remainingResp.data.variants || [];
+						const imageStillInUse = remainingVariants.some(
+							(v) => v.image_id === imageIdToDelete
+						);
+
+						await sleep(DELAY_BETWEEN_REQUESTS);
+
+						// Solo eliminar la imagen si no está siendo usada por otras variantes
+						if (!imageStillInUse) {
+							const deleteImageUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}/images/${imageIdToDelete}.json`;
+
+							await axios.delete(deleteImageUrl, {
+								headers: {
+									'X-Shopify-Access-Token':
+										process.env.SHOPIFY_ACCESS_TOKEN,
+								},
+							});
+
+							console.log(
+								`  ✓ Imagen eliminada (ID: ${imageIdToDelete})`
+							);
+							imageDeleted = true;
+						} else {
+							console.log(
+								`  ℹ Imagen conservada (en uso por otras variantes)`
+							);
+						}
+
+						await sleep(DELAY_BETWEEN_REQUESTS);
+					} catch (imageError) {
+						console.error(
+							`  ⚠ Error al eliminar imagen:`,
+							imageError.response?.data || imageError.message
+						);
+						// No marcamos como error porque la variante sí se eliminó
+					}
+				}
+
+				results.push({
+					index: i,
+					variant_id: variantGid,
+					numeric_variant_id: variantId,
+					product_id: productId,
+					sku: variantInfo.sku,
+					success: true,
+					variant_deleted: true,
+					image_deleted: imageDeleted,
+					image_id: imageIdToDelete,
+				});
+			} catch (deleteError) {
+				// Manejar rate limiting
+				if (deleteError.response?.status === 429) {
+					console.error(`  ✗ Rate limit alcanzado, esperando...`);
+					const retryAfter =
+						parseInt(
+							deleteError.response.headers['retry-after'] || '2'
+						) * 1000;
+					await sleep(retryAfter);
+					i--; // Reintentar
+					continue;
+				}
+
+				console.error(`  ✗ Error:`, deleteError.message);
+
+				errors.push({
+					index: i,
+					variant_id: variantGid,
+					error: deleteError.message,
+				});
 			}
 		}
 
-		// Ahora eliminar la variante
-		const deleteVariantMutation = `
-      mutation productVariantDelete($id: ID!) {
-        productVariantDelete(id: $id) {
-          deletedProductVariantId
-          product {
-            id
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `;
+		console.log(`\n=== RESUMEN ===`);
+		console.log(`✓ Exitosos: ${results.length}`);
+		console.log(`✗ Errores: ${errors.length}`);
 
-		console.log('Deleting variant with ID:', formattedVariantId);
+		const statusCode =
+			errors.length > 0 ? (results.length > 0 ? 207 : 400) : 200;
 
-		const deleteVariantResponse = await graphqlClient.query({
-			data: {
-				query: deleteVariantMutation,
-				variables: {
-					id: formattedVariantId,
-				},
-			},
+		return res.status(statusCode).json({
+			success: errors.length === 0,
+			total: variants.length,
+			successful: results.length,
+			failed: errors.length,
+			results,
+			errors: errors.length > 0 ? errors : undefined,
 		});
+	} catch (err) {
+		console.error('\n=== ERROR GENERAL ===');
+		console.error(err);
+		return res.status(500).json({
+			success: false,
+			error: err.message,
+			stack:
+				process.env.NODE_ENV === 'development'
+					? err.stack
+					: undefined,
+		});
+	}
+};
 
+const updateVariant= async (req, res) => {
+	console.log('caso 1');
+	const axios = require('axios');
+	const shopUrl = process.env.SHOPIFY_SHOP_URL.replace(
+		/^https?:\/\//,
+		''
+	);
+
+	try {
+		const { shopify_id, variant_id, price, sku, options, imageUrls } =
+			req.body;
+
+		// Validaciones
+		if (!shopify_id || !variant_id) {
+			return res.status(400).json({
+				success: false,
+				error: 'Se requieren los campos shopify_id y variant_id',
+			});
+		}
+
+		console.log(`\n=== ACTUALIZANDO VARIANTE ===`);
+		console.log(`Product ID: ${shopify_id}`);
+		console.log(`Variant ID: ${variant_id}`);
+		console.log(`SKU: ${sku || 'sin cambios'}`);
+		console.log(`Price: ${price || 'sin cambios'}`);
 		console.log(
-			'Delete Variant Response:',
-			JSON.stringify(deleteVariantResponse.body, null, 2)
+			`Options: ${options ? options.join(', ') : 'sin cambios'}`
 		);
 
-		if (deleteVariantResponse.body.errors) {
-			throw new Error(
-				`Error deleting variant: ${JSON.stringify(
-					deleteVariantResponse.body.errors
-				)}`
-			);
+		const sleep = (ms) =>
+			new Promise((resolve) => setTimeout(resolve, ms));
+
+		// PASO 1: Construir objeto de actualización de variante
+		const variantData = {
+			variant: {
+				id: variant_id,
+			},
+		};
+
+		// Agregar solo los campos que vienen en el request
+		if (price !== undefined) {
+			variantData.variant.price = String(price);
 		}
 
-		if (
-			deleteVariantResponse.body.data?.productVariantDelete
-				?.userErrors?.length > 0
-		) {
-			throw new Error(
-				`Error deleting variant: ${JSON.stringify(
-					deleteVariantResponse.body.data.productVariantDelete
-						.userErrors
-				)}`
-			);
+		if (sku !== undefined) {
+			variantData.variant.sku = sku;
 		}
+
+		if (Array.isArray(options)) {
+			if (options[0] !== undefined)
+				variantData.variant.option1 = options[0];
+			if (options[1] !== undefined)
+				variantData.variant.option2 = options[1];
+			if (options[2] !== undefined)
+				variantData.variant.option3 = options[2];
+		}
+
+		// PASO 2: Manejar imágenes si se proporcionan
+		let imageId = null;
+		if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+			console.log(`\n[1/3] Procesando imagen para la variante...`);
+
+			try {
+				// Obtener las imágenes actuales del producto
+				const getImagesUrl = `https://${shopUrl}/admin/api/2024-10/products/${shopify_id}/images.json`;
+				const imagesResp = await axios.get(getImagesUrl, {
+					headers: {
+						'X-Shopify-Access-Token':
+							process.env.SHOPIFY_ACCESS_TOKEN,
+						'Content-Type': 'application/json',
+					},
+				});
+
+				const existingImages = imagesResp.data.images || [];
+				const firstImageUrl = imageUrls[0];
+
+				// Buscar si la imagen ya existe en el producto
+				let existingImage = existingImages.find(
+					(img) => img.src === firstImageUrl
+				);
+
+				if (existingImage) {
+					imageId = existingImage.id;
+					console.log(
+						`  ✓ Imagen ya existe en el producto (ID: ${imageId})`
+					);
+				} else {
+					// Crear nueva imagen en el producto
+					console.log(`  → Subiendo nueva imagen al producto...`);
+
+					const createImageUrl = `https://${shopUrl}/admin/api/2024-10/products/${shopify_id}/images.json`;
+					const imageResp = await axios.post(
+						createImageUrl,
+						{
+							image: {
+								src: firstImageUrl,
+								alt: sku || '',
+							},
+						},
+						{
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+
+					imageId = imageResp.data.image.id;
+					console.log(
+						`  ✓ Imagen subida exitosamente (ID: ${imageId})`
+					);
+				}
+
+				// Asignar la imagen a la variante
+				if (imageId) {
+					variantData.variant.image_id = imageId;
+				}
+
+				await sleep(100);
+			} catch (imageError) {
+				console.error(
+					`  ⚠ Error procesando imagen:`,
+					imageError.response?.data || imageError.message
+				);
+				// Continuar con la actualización aunque falle la imagen
+			}
+		}
+
+		// PASO 3: Actualizar la variante
+		console.log(`\n[2/3] Actualizando datos de la variante...`);
+
+		const updateVariantUrl = `https://${shopUrl}/admin/api/2024-10/variants/${variant_id}.json`;
+
+		let updatedVariant = null;
+		try {
+			const variantResp = await axios.put(
+				updateVariantUrl,
+				variantData,
+				{
+					headers: {
+						'X-Shopify-Access-Token':
+							process.env.SHOPIFY_ACCESS_TOKEN,
+						'Content-Type': 'application/json',
+					},
+				}
+			);
+
+			updatedVariant = variantResp.data.variant;
+			console.log(`  ✓ Variante actualizada exitosamente`);
+		} catch (variantError) {
+			console.error(
+				`  ✗ Error actualizando variante:`,
+				variantError.response?.data || variantError.message
+			);
+			return res.status(400).json({
+				success: false,
+				error: 'Error actualizando variante',
+				details: variantError.response?.data,
+			});
+		}
+
+		// PASO 4: Obtener información completa de la variante actualizada
+		console.log(`\n[3/3] Obteniendo información actualizada...`);
+
+		try {
+			const getVariantUrl = `https://${shopUrl}/admin/api/2024-10/variants/${variant_id}.json`;
+			const finalResp = await axios.get(getVariantUrl, {
+				headers: {
+					'X-Shopify-Access-Token': process.env.SHOPIFY_ACCESS_TOKEN,
+					'Content-Type': 'application/json',
+				},
+			});
+
+			updatedVariant = finalResp.data.variant;
+		} catch (getError) {
+			console.error(
+				`  ⚠ Error obteniendo info actualizada:`,
+				getError.message
+			);
+			// Usar la respuesta anterior si falla
+		}
+
+		console.log(`\n=== VARIANTE ACTUALIZADA EXITOSAMENTE ===\n`);
 
 		return res.json({
 			success: true,
-			deletedVariantId:
-				deleteVariantResponse.body.data.productVariantDelete
-					.deletedProductVariantId,
-			deletedMediaIds: variant.media.edges.map(
-				(edge) => edge.node.id
-			),
+			variant: {
+				shopify_variant_id: updatedVariant.id,
+				shopify_id: updatedVariant.product_id,
+				sku: updatedVariant.sku,
+				price: updatedVariant.price,
+				inventory_item_id: updatedVariant.inventory_item_id,
+				inventory_quantity: updatedVariant.inventory_quantity,
+				image_id: updatedVariant.image_id,
+				options: [
+					updatedVariant.option1,
+					updatedVariant.option2,
+					updatedVariant.option3,
+				].filter(Boolean),
+				barcode: updatedVariant.barcode,
+				weight: updatedVariant.weight,
+				weight_unit: updatedVariant.weight_unit,
+				shopify_created_at: updatedVariant.created_at,
+				shopify_updated_at: updatedVariant.updated_at,
+			},
+			updated_fields: {
+				price: price !== undefined,
+				sku: sku !== undefined,
+				options: Array.isArray(options),
+				image: imageId !== null,
+			},
 		});
-	} catch (error) {
-		console.error('Shopify GraphQL API Error:', error);
+	} catch (err) {
+		console.error('\n=== ERROR GENERAL ===');
+		console.error(err);
 		return res.status(500).json({
 			success: false,
-			error: error.message,
+			error: err.message,
+			stack:
+				process.env.NODE_ENV === 'development'
+					? err.stack
+					: undefined,
 		});
 	}
 };
@@ -2143,7 +2456,7 @@ const createProductFullFlow = async (req, res) => {
 						sku: variant.sku,
 						price: variant.price,
 						image_id: variant.image_id,
-            inventory_item_id: variant.inventory_item_id, 
+						inventory_item_id: variant.inventory_item_id,
 						options: optionsValues,
 					});
 
@@ -2221,6 +2534,7 @@ module.exports = {
 	createProductWithMediaGraphQL,
 	deleteProductGraphQL,
 	updateVariantMedia,
+	updateVariant,
 	deleteVariant,
 	createVariantGraphQL,
 	createProductFullFlow,

@@ -7,13 +7,13 @@ const {
   deleteProductGraphQL,
   updateVariantMedia,
   deleteVariant,
+  updateVariant,
   createVariantGraphQL,
   createProductFullFlow
 } = require('../controllers/productGraphQLController');
 
 // Ruta para crear productos usando GraphQL
 router.post('/graphql/create', createProductsGraphQL);
-
 // Ruta para actualizar precios de variantes usando GraphQL
 router.put('/prices/graphql', updateVariantPricesGraphQL);
 
@@ -24,6 +24,7 @@ router.post('/graphql/create-with-media', createProductWithMediaGraphQL);
 router.delete('/graphql/delete', deleteProductGraphQL);
 
 // Ruta para actualizar medios de variantes
+router.post('/graphql/variant/update', updateVariant);
 router.post('/variant/update-media', updateVariantMedia);
 
 // Ruta para eliminar variantes
