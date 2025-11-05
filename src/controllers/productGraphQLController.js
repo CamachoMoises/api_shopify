@@ -1299,7 +1299,7 @@ const deleteVariant = async (req, res) => {
 	}
 };
 
-const updateVariant= async (req, res) => {
+const updateVariant = async (req, res) => {
 	console.log('caso 1');
 	const axios = require('axios');
 	const shopUrl = process.env.SHOPIFY_SHOP_URL.replace(
@@ -2170,7 +2170,6 @@ const createProductFullFlow = async (req, res) => {
 		/^https?:\/\//,
 		''
 	);
-
 	try {
 		const { media, input } = req.body || {};
 
@@ -2329,49 +2328,45 @@ const createProductFullFlow = async (req, res) => {
 			}
 		}
 
-		// PASO 3: Configurar opciones del producto (si hay más de una variante)
-		if (
-			input.variants.length > 1 ||
-			(input.options && input.options.length > 0)
-		) {
-			console.log('\n[3/5] Configurando opciones del producto...');
+		// PASO 3: Configurar opciones del producto
+		console.log('\n[3/5] Configurando opciones del producto...');
 
-			const productOptions = input.options || ['Variante'];
+		// Siempre configurar opciones si se especifican, incluso con 1 variante
+		const productOptions = input.options || ['Variante'];
 
-			try {
-				const updateProductUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}.json`;
-				await axios.put(
-					updateProductUrl,
-					{
-						product: {
-							id: productId,
-							options: productOptions.map((name) => ({ name })),
-						},
+		try {
+			const updateProductUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}.json`;
+			await axios.put(
+				updateProductUrl,
+				{
+					product: {
+						id: productId,
+						options: productOptions.map((name) => ({ name })),
 					},
-					{
-						headers: {
-							'X-Shopify-Access-Token':
-								process.env.SHOPIFY_ACCESS_TOKEN,
-							'Content-Type': 'application/json',
-						},
-					}
-				);
-				console.log(
-					'✓ Opciones configuradas:',
-					productOptions.join(', ')
-				);
+				},
+				{
+					headers: {
+						'X-Shopify-Access-Token':
+							process.env.SHOPIFY_ACCESS_TOKEN,
+						'Content-Type': 'application/json',
+					},
+				}
+			);
+			console.log(
+				'✓ Opciones configuradas:',
+				productOptions.join(', ')
+			);
 
-				// Esperar para que se procesen las opciones
-				await new Promise((resolve) => setTimeout(resolve, 1500));
-			} catch (optionError) {
-				console.error(
-					'Error configurando opciones:',
-					optionError.response?.data || optionError.message
-				);
-			}
+			// Esperar para que se procesen las opciones
+			await new Promise((resolve) => setTimeout(resolve, 1500));
+		} catch (optionError) {
+			console.error(
+				'Error configurando opciones:',
+				optionError.response?.data || optionError.message
+			);
 		}
 
-		// PASO 4: Obtener y eliminar la variante "Default Title"
+		// PASO 4: Obtener la variante "Default Title" para actualizarla
 		console.log('\n[4/5] Gestionando variante por defecto...');
 		let defaultVariantId = null;
 
@@ -2394,88 +2389,165 @@ const createProductFullFlow = async (req, res) => {
 					'✓ Variante por defecto encontrada:',
 					defaultVariantId
 				);
+
+				// Si solo hay una variante, actualizar la existente en lugar de crear y eliminar
+				if (input.variants.length === 1) {
+					console.log('  → Actualizando variante existente...');
+					const v = input.variants[0];
+					const optionsValues = Array.isArray(v.options)
+						? v.options
+						: [];
+
+					let imageId = null;
+					if (Array.isArray(v.mediaSrc) && v.mediaSrc.length > 0) {
+						const firstMediaSrc = v.mediaSrc[0];
+						if (mediaMap.has(firstMediaSrc)) {
+							imageId = mediaMap.get(firstMediaSrc);
+						}
+					}
+
+					const variantData = {
+						variant: {
+							id: defaultVariantId,
+							price: v.price != null ? String(v.price) : undefined,
+							sku: v.sku || undefined,
+							inventory_management:
+								v.inventoryManagement?.toLowerCase() || 'shopify',
+							inventory_policy:
+								v.inventoryPolicy?.toLowerCase() || 'deny',
+							option1: optionsValues[0] || undefined,
+							option2: optionsValues[1] || undefined,
+							option3: optionsValues[2] || undefined,
+							image_id: imageId,
+						},
+					};
+
+					const updateVariantUrl = `https://${shopUrl}/admin/api/2024-10/variants/${defaultVariantId}.json`;
+					const variantResp = await axios.put(
+						updateVariantUrl,
+						variantData,
+						{
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+
+					const variant = variantResp.data.variant;
+
+					console.log('\n=== PRODUCTO CREADO EXITOSAMENTE ===\n');
+
+					return res.json({
+						success: true,
+						product: {
+							id: productId,
+							gid: productGid,
+							title: input.title,
+						},
+						variants: [
+							{
+								id: `gid://shopify/ProductVariant/${variant.id}`,
+								numericId: variant.id,
+								sku: variant.sku,
+								price: variant.price,
+								image_id: variant.image_id,
+								inventory_item_id: variant.inventory_item_id,
+								options: optionsValues,
+							},
+						],
+						summary: {
+							totalVariants: 1,
+							totalImages: mediaMap.size,
+						},
+					});
+				}
 			}
 		} catch (err) {
 			console.error('Error obteniendo variantes:', err.message);
 		}
-
 		// PASO 5: Crear las variantes personalizadas
-		console.log('\n[5/5] Creando variantes personalizadas...');
-		const createdVariants = [];
+		if (input.variants.length > 1) {
+			console.log('\n[5/5] Creando variantes personalizadas...');
+			const createdVariants = [];
 
-		for (let i = 0; i < input.variants.length; i++) {
-			const v = input.variants[i];
-			const optionsValues = Array.isArray(v.options) ? v.options : [];
+			for (let i = 0; i < input.variants.length; i++) {
+				const v = input.variants[i];
+				const optionsValues = Array.isArray(v.options)
+					? v.options
+					: [];
 
-			// Buscar el ID de imagen para esta variante
-			let imageId = null;
-			if (Array.isArray(v.mediaSrc) && v.mediaSrc.length > 0) {
-				const firstMediaSrc = v.mediaSrc[0];
-				if (mediaMap.has(firstMediaSrc)) {
-					imageId = mediaMap.get(firstMediaSrc);
-					console.log(
-						`  → Variante ${v.sku}: asignando imagen ID ${imageId}`
-					);
-				}
-			}
-
-			const variantData = {
-				variant: {
-					price: v.price != null ? String(v.price) : undefined,
-					sku: v.sku || undefined,
-					inventory_management:
-						v.inventoryManagement?.toLowerCase() || 'shopify',
-					inventory_policy:
-						v.inventoryPolicy?.toLowerCase() || 'deny',
-					option1: optionsValues[0] || undefined,
-					option2: optionsValues[1] || undefined,
-					option3: optionsValues[2] || undefined,
-					image_id: imageId,
-				},
-			};
-
-			try {
-				const createVariantUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}/variants.json`;
-				const variantResp = await axios.post(
-					createVariantUrl,
-					variantData,
-					{
-						headers: {
-							'X-Shopify-Access-Token':
-								process.env.SHOPIFY_ACCESS_TOKEN,
-							'Content-Type': 'application/json',
-						},
+				// Buscar el ID de imagen para esta variante
+				let imageId = null;
+				if (Array.isArray(v.mediaSrc) && v.mediaSrc.length > 0) {
+					const firstMediaSrc = v.mediaSrc[0];
+					if (mediaMap.has(firstMediaSrc)) {
+						imageId = mediaMap.get(firstMediaSrc);
+						console.log(
+							`  → Variante ${v.sku}: asignando imagen ID ${imageId}`
+						);
 					}
-				);
-
-				if (variantResp.data?.variant?.id) {
-					const variant = variantResp.data.variant;
-					createdVariants.push({
-						id: `gid://shopify/ProductVariant/${variant.id}`,
-						numericId: variant.id,
-						sku: variant.sku,
-						price: variant.price,
-						image_id: variant.image_id,
-						inventory_item_id: variant.inventory_item_id,
-						options: optionsValues,
-					});
-
-					console.log(
-						`✓ Variante ${i + 1}/${input.variants.length}: ${
-							variant.sku
-						} (ID: ${variant.id})`
-					);
 				}
-			} catch (variantError) {
-				console.error(
-					`✗ Error creando variante ${v.sku}:`,
-					variantError.response?.data || variantError.message
-				);
-				return res.status(400).json({
-					success: false,
-					error: `Error creando variante ${v.sku}`,
-					details: variantError.response?.data,
-				});
+
+				const variantData = {
+					variant: {
+						price: v.price != null ? String(v.price) : undefined,
+						sku: v.sku || undefined,
+						inventory_management:
+							v.inventoryManagement?.toLowerCase() || 'shopify',
+						inventory_policy:
+							v.inventoryPolicy?.toLowerCase() || 'deny',
+						option1: optionsValues[0] || undefined,
+						option2: optionsValues[1] || undefined,
+						option3: optionsValues[2] || undefined,
+						image_id: imageId,
+					},
+				};
+
+				try {
+					const createVariantUrl = `https://${shopUrl}/admin/api/2024-10/products/${productId}/variants.json`;
+					const variantResp = await axios.post(
+						createVariantUrl,
+						variantData,
+						{
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+
+					if (variantResp.data?.variant?.id) {
+						const variant = variantResp.data.variant;
+						createdVariants.push({
+							id: `gid://shopify/ProductVariant/${variant.id}`,
+							numericId: variant.id,
+							sku: variant.sku,
+							price: variant.price,
+							image_id: variant.image_id,
+							inventory_item_id: variant.inventory_item_id,
+							options: optionsValues,
+						});
+
+						console.log(
+							`✓ Variante ${i + 1}/${input.variants.length}: ${
+								variant.sku
+							} (ID: ${variant.id})`
+						);
+					}
+				} catch (variantError) {
+					console.error(
+						`✗ Error creando variante ${v.sku}:`,
+						variantError.response?.data || variantError.message
+					);
+					return res.status(400).json({
+						success: false,
+						error: `Error creando variante ${v.sku}`,
+						details: variantError.response?.data,
+					});
+				}
 			}
 		}
 
