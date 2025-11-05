@@ -12,6 +12,9 @@ const app = express();
 app.use(express.json());
 
 // API routes
+app.get('/', (req, res) => {
+  res.send('Welcome to the E-commerce API');
+});
 app.use('/api/products', productRoutes);
 app.use('/api/products', productGraphQLRoutes);
 app.use('/api/inventory', inventoryRoutes);
