@@ -9,7 +9,8 @@ const {
   deleteVariant,
   updateVariant,
   createVariantGraphQL,
-  createProductFullFlow
+  createProductFullFlow,
+  deleteDefaultTitleVariants
 } = require('../controllers/productGraphQLController');
 
 // Ruta para crear productos usando GraphQL
@@ -35,5 +36,7 @@ router.post('/variant/graphql', createVariantGraphQL);
 
 // NUEVO: Ruta para crear producto + medios + variantes + links
 router.post('/graphql/create-full', createProductFullFlow);
+
+router.post('/graphql/deleteDefaultVariants', deleteDefaultTitleVariants);
 
 module.exports = router; 

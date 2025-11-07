@@ -8,6 +8,11 @@ const updateInventoryGraphQL = async (req, res) => {
 		''
 	);
 
+	// Configuración de rate limiting
+	const DELAY_BETWEEN_REQUESTS = 500; // 500ms = 2 requests/segundo
+	const MAX_RETRIES = 3;
+	const MAX_BATCH_SIZE = 100;
+
 	try {
 		const { inventory_updates } = req.body;
 
@@ -22,6 +27,16 @@ const updateInventoryGraphQL = async (req, res) => {
 			});
 		}
 
+		// Validar límite máximo
+		if (inventory_updates.length > MAX_BATCH_SIZE) {
+			return res.status(400).json({
+				success: false,
+				error: `El número de actualizaciones (${inventory_updates.length}) excede el límite máximo (${MAX_BATCH_SIZE}). Por favor, divida la solicitud en lotes más pequeños.`,
+				max_allowed: MAX_BATCH_SIZE,
+				received: inventory_updates.length,
+			});
+		}
+
 		console.log(`\n=== ACTUALIZANDO INVENTARIO ===`);
 		console.log(
 			`Total de actualizaciones: ${inventory_updates.length}`
@@ -29,6 +44,34 @@ const updateInventoryGraphQL = async (req, res) => {
 
 		const results = [];
 		const errors = [];
+		const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+		// Función para hacer request con reintentos
+		const requestWithRetry = async (requestFn, retries = MAX_RETRIES) => {
+			for (let attempt = 1; attempt <= retries; attempt++) {
+				try {
+					return await requestFn();
+				} catch (error) {
+					if (error.response?.status === 429) {
+						const retryAfter =
+							parseInt(error.response.headers['retry-after'] || '2') *
+							1000;
+						console.log(
+							`  ⏳ Rate limit alcanzado. Esperando ${
+								retryAfter / 1000
+							}s... (Intento ${attempt}/${retries})`
+						);
+						await sleep(retryAfter);
+
+						if (attempt === retries) {
+							throw error;
+						}
+					} else {
+						throw error;
+					}
+				}
+			}
+		};
 
 		for (let i = 0; i < inventory_updates.length; i++) {
 			const update = inventory_updates[i];
@@ -56,34 +99,28 @@ const updateInventoryGraphQL = async (req, res) => {
 
 			try {
 				console.log(
-					`\n[${i + 1}/${
-						inventory_updates.length
-					}] Actualizando inventario:`
+					`[${i + 1}/${inventory_updates.length}] Actualizando: Product ${product_id}, Quantity ${quantity}`
 				);
-				console.log(`  - Product ID: ${product_id}`);
-				console.log(
-					`  - Inventory Item ID: ${shopify_inventory_item_id}`
-				);
-				console.log(`  - Location ID: ${shopify_location_id}`);
-				console.log(`  - Nueva cantidad: ${quantity}`);
 
 				const updateUrl = `https://${shopUrl}/admin/api/2024-10/inventory_levels/set.json`;
 
-				const response = await axios.post(
-					updateUrl,
-					{
-						location_id: parseInt(shopify_location_id),
-						inventory_item_id: parseInt(shopify_inventory_item_id),
-						available: parseInt(quantity),
-					},
-					{
-						headers: {
-							'X-Shopify-Access-Token':
-								process.env.SHOPIFY_ACCESS_TOKEN,
-							'Content-Type': 'application/json',
+				const response = await requestWithRetry(async () => {
+					return await axios.post(
+						updateUrl,
+						{
+							location_id: parseInt(shopify_location_id),
+							inventory_item_id: parseInt(shopify_inventory_item_id),
+							available: parseInt(quantity),
 						},
-					}
-				);
+						{
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+				});
 
 				results.push({
 					index: i,
@@ -95,10 +132,15 @@ const updateInventoryGraphQL = async (req, res) => {
 					inventory_level: response.data.inventory_level,
 				});
 
-				console.log(`  ✓ Inventario actualizado exitosamente`);
+				console.log(`  ✓ Exitoso`);
+
+				// Esperar entre requests (excepto en el último)
+				if (i < inventory_updates.length - 1) {
+					await sleep(DELAY_BETWEEN_REQUESTS);
+				}
 			} catch (updateError) {
 				console.error(
-					`  ✗ Error actualizando inventario:`,
+					`  ✗ Error:`,
 					updateError.response?.data || updateError.message
 				);
 
@@ -118,7 +160,6 @@ const updateInventoryGraphQL = async (req, res) => {
 		console.log(`✓ Exitosos: ${results.length}`);
 		console.log(`✗ Errores: ${errors.length}`);
 
-		// Si hay errores pero también éxitos, devolver código 207 (Multi-Status)
 		const statusCode =
 			errors.length > 0 ? (results.length > 0 ? 207 : 400) : 200;
 
@@ -137,9 +178,7 @@ const updateInventoryGraphQL = async (req, res) => {
 			success: false,
 			error: err.message,
 			stack:
-				process.env.NODE_ENV === 'development'
-					? err.stack
-					: undefined,
+				process.env.NODE_ENV === 'development' ? err.stack : undefined,
 		});
 	}
 };

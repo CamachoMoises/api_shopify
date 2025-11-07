@@ -2600,10 +2600,591 @@ const createProductFullFlow = async (req, res) => {
 	}
 };
 
+const deleteDefaultTitleVariants = async (req, res) => {
+	const axios = require('axios');
+	const shopUrl = process.env.SHOPIFY_SHOP_URL.replace(
+		/^https?:\/\//,
+		''
+	);
+
+	// Configuración más conservadora para evitar rate limiting
+	const DELAY_BETWEEN_REQUESTS = 500; // 500ms = 2 requests/segundo (máximo seguro)
+	const DELAY_BETWEEN_PRODUCTS = 1000; // 1 segundo entre productos
+	const PRODUCTS_PER_PAGE = 50;
+	const MAX_RETRIES = 3;
+
+	try {
+		const { product_ids } = req.body;
+
+		console.log('\n=== ELIMINANDO VARIANTES "DEFAULT TITLE" ===');
+
+		const sleep = (ms) =>
+			new Promise((resolve) => setTimeout(resolve, ms));
+		const results = [];
+		const errors = [];
+		let totalProcessed = 0;
+		let totalDeleted = 0;
+		let totalSkipped = 0;
+
+		// Función para hacer request con reintentos automáticos
+		const requestWithRetry = async (
+			requestFn,
+			retries = MAX_RETRIES
+		) => {
+			for (let attempt = 1; attempt <= retries; attempt++) {
+				try {
+					return await requestFn();
+				} catch (error) {
+					if (error.response?.status === 429) {
+						const retryAfter =
+							parseInt(error.response.headers['retry-after'] || '2') *
+							1000;
+						console.log(
+							`  ⏳ Rate limit alcanzado. Esperando ${
+								retryAfter / 1000
+							}s... (Intento ${attempt}/${retries})`
+						);
+						await sleep(retryAfter);
+
+						if (attempt === retries) {
+							throw error;
+						}
+					} else {
+						throw error;
+					}
+				}
+			}
+		};
+
+		// Función para procesar un producto
+		const processProduct = async (productId) => {
+			try {
+				console.log(
+					`\n[Producto ${productId}] Verificando variantes...`
+				);
+
+				// Obtener todas las variantes del producto
+				const variantsResp = await requestWithRetry(async () => {
+					return await axios.get(
+						`https://${shopUrl}/admin/api/2024-10/products/${productId}/variants.json`,
+						{
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+				});
+
+				const variants = variantsResp.data?.variants || [];
+				const totalVariants = variants.length;
+
+				console.log(`  Total de variantes: ${totalVariants}`);
+
+				await sleep(DELAY_BETWEEN_REQUESTS);
+
+				// Buscar variantes con "Default Title"
+				const defaultTitleVariants = variants.filter(
+					(v) =>
+						v.title === 'Default Title' ||
+						v.title?.toLowerCase() === 'default title'
+				);
+
+				if (defaultTitleVariants.length === 0) {
+					console.log(`  ✓ No hay variantes "Default Title"`);
+					totalSkipped++;
+					return {
+						product_id: productId,
+						action: 'skipped',
+						reason: 'No default title variants found',
+						total_variants: totalVariants,
+					};
+				}
+
+				console.log(
+					`  Encontradas ${defaultTitleVariants.length} variante(s) "Default Title"`
+				);
+
+				// No eliminar si es la única variante
+				if (totalVariants === 1) {
+					console.log(
+						`  ⚠ Es la única variante, no se puede eliminar`
+					);
+					totalSkipped++;
+					return {
+						product_id: productId,
+						action: 'skipped',
+						reason: 'Only variant in product',
+						total_variants: totalVariants,
+						default_variants: defaultTitleVariants.length,
+					};
+				}
+
+				// Eliminar cada variante "Default Title"
+				const deletedVariants = [];
+				for (const variant of defaultTitleVariants) {
+					try {
+						console.log(
+							`  → Eliminando variante ${variant.id} (SKU: ${
+								variant.sku || 'N/A'
+							})...`
+						);
+
+						await requestWithRetry(async () => {
+							return await axios.delete(
+								`https://${shopUrl}/admin/api/2024-10/products/${productId}/variants/${variant.id}.json`,
+								{
+									headers: {
+										'X-Shopify-Access-Token':
+											process.env.SHOPIFY_ACCESS_TOKEN,
+									},
+								}
+							);
+						});
+
+						deletedVariants.push({
+							variant_id: variant.id,
+							sku: variant.sku,
+							title: variant.title,
+						});
+
+						totalDeleted++;
+						console.log(`    ✓ Variante eliminada`);
+
+						await sleep(DELAY_BETWEEN_REQUESTS);
+					} catch (deleteError) {
+						console.error(
+							`    ✗ Error eliminando variante ${variant.id}:`,
+							deleteError.response?.data || deleteError.message
+						);
+						errors.push({
+							product_id: productId,
+							variant_id: variant.id,
+							error:
+								deleteError.response?.data?.errors ||
+								deleteError.message,
+						});
+					}
+				}
+
+				return {
+					product_id: productId,
+					action: 'processed',
+					total_variants: totalVariants,
+					deleted_variants: deletedVariants.length,
+					variants_deleted: deletedVariants,
+					remaining_variants: totalVariants - deletedVariants.length,
+				};
+			} catch (productError) {
+				console.error(
+					`✗ Error procesando producto ${productId}:`,
+					productError.response?.data || productError.message
+				);
+				errors.push({
+					product_id: productId,
+					error:
+						productError.response?.data?.errors ||
+						productError.message,
+				});
+
+				return {
+					product_id: productId,
+					action: 'error',
+					error: productError.message,
+				};
+			}
+		};
+
+		// Si se proporcionan IDs específicos, procesar solo esos
+		if (Array.isArray(product_ids) && product_ids.length > 0) {
+			console.log(
+				`Procesando ${product_ids.length} productos específicos...`
+			);
+
+			for (const productId of product_ids) {
+				const result = await processProduct(productId);
+				results.push(result);
+				totalProcessed++;
+
+				// Esperar más tiempo entre productos
+				await sleep(DELAY_BETWEEN_PRODUCTS);
+			}
+		} else {
+			// Recorrer TODOS los productos de la tienda
+			console.log('Procesando TODOS los productos de la tienda...');
+
+			let hasNextPage = true;
+			let pageInfo = null;
+			let pageCount = 0;
+
+			while (hasNextPage) {
+				pageCount++;
+				console.log(`\n--- Página ${pageCount} ---`);
+
+				// Construir URL con paginación
+				let getProductsUrl = `https://${shopUrl}/admin/api/2024-10/products.json?limit=${PRODUCTS_PER_PAGE}&fields=id`;
+
+				if (pageInfo) {
+					getProductsUrl += `&page_info=${pageInfo}`;
+				}
+
+				try {
+					const productsResp = await requestWithRetry(async () => {
+						return await axios.get(getProductsUrl, {
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						});
+					});
+
+					const products = productsResp.data?.products || [];
+					console.log(`Productos en esta página: ${products.length}`);
+
+					if (products.length === 0) {
+						hasNextPage = false;
+						break;
+					}
+
+					// Procesar cada producto
+					for (const product of products) {
+						const result = await processProduct(product.id);
+						results.push(result);
+						totalProcessed++;
+
+						// Esperar entre productos
+						await sleep(DELAY_BETWEEN_PRODUCTS);
+					}
+
+					// Verificar si hay más páginas
+					const linkHeader = productsResp.headers['link'];
+					if (linkHeader && linkHeader.includes('rel="next"')) {
+						const nextMatch = linkHeader.match(
+							/<[^>]*[?&]page_info=([^>&]+)>;\s*rel="next"/
+						);
+						if (nextMatch) {
+							pageInfo = nextMatch[1];
+						} else {
+							hasNextPage = false;
+						}
+					} else {
+						hasNextPage = false;
+					}
+
+					await sleep(DELAY_BETWEEN_REQUESTS);
+				} catch (pageError) {
+					console.error(
+						'Error obteniendo página de productos:',
+						pageError.message
+					);
+					hasNextPage = false;
+				}
+			}
+		}
+
+		console.log('\n=== RESUMEN FINAL ===');
+		console.log(`Total de productos procesados: ${totalProcessed}`);
+		console.log(
+			`Variantes "Default Title" eliminadas: ${totalDeleted}`
+		);
+		console.log(`Productos sin cambios: ${totalSkipped}`);
+		console.log(`Errores: ${errors.length}`);
+
+		return res.json({
+			success: errors.length === 0,
+			summary: {
+				total_products_processed: totalProcessed,
+				total_variants_deleted: totalDeleted,
+				products_skipped: totalSkipped,
+				errors_count: errors.length,
+			},
+			results,
+			errors: errors.length > 0 ? errors : undefined,
+		});
+	} catch (err) {
+		console.error('\n=== ERROR GENERAL ===');
+		console.error(err);
+		return res.status(500).json({
+			success: false,
+			error: err.message,
+			stack:
+				process.env.NODE_ENV === 'development'
+					? err.stack
+					: undefined,
+		});
+	}
+};
+const getProductsWithoutInventory= async (req, res) => {
+	const axios = require('axios');
+	const shopUrl = process.env.SHOPIFY_SHOP_URL.replace(
+		/^https?:\/\//,
+		''
+	);
+
+	// Configuración
+	const DELAY_BETWEEN_REQUESTS = 500;
+	const PRODUCTS_PER_PAGE = 50;
+	const MAX_RETRIES = 3;
+
+	try {
+		const { limit } = req.query; // Opcional: limitar cantidad de productos a retornar
+		const maxProducts = limit ? parseInt(limit) : null;
+
+		console.log('\n=== BUSCANDO PRODUCTOS SIN INVENTARIO ===');
+		if (maxProducts) {
+			console.log(`Límite máximo: ${maxProducts} productos`);
+		}
+
+		const sleep = (ms) =>
+			new Promise((resolve) => setTimeout(resolve, ms));
+		const productsWithoutInventory = [];
+		let totalProcessed = 0;
+
+		// Función para hacer request con reintentos
+		const requestWithRetry = async (
+			requestFn,
+			retries = MAX_RETRIES
+		) => {
+			for (let attempt = 1; attempt <= retries; attempt++) {
+				try {
+					return await requestFn();
+				} catch (error) {
+					if (error.response?.status === 429) {
+						const retryAfter =
+							parseInt(error.response.headers['retry-after'] || '2') *
+							1000;
+						console.log(
+							`⏳ Rate limit. Esperando ${retryAfter / 1000}s...`
+						);
+						await sleep(retryAfter);
+
+						if (attempt === retries) throw error;
+					} else {
+						throw error;
+					}
+				}
+			}
+		};
+
+		// Función para verificar inventario de un producto
+		const checkProductInventory = async (product) => {
+			try {
+				const productId = product.id;
+
+				// Obtener variantes del producto
+				const variantsResp = await requestWithRetry(async () => {
+					return await axios.get(
+						`https://${shopUrl}/admin/api/2024-10/products/${productId}/variants.json`,
+						{
+							headers: {
+								'X-Shopify-Access-Token':
+									process.env.SHOPIFY_ACCESS_TOKEN,
+								'Content-Type': 'application/json',
+							},
+						}
+					);
+				});
+
+				const variants = variantsResp.data?.variants || [];
+
+				await sleep(DELAY_BETWEEN_REQUESTS);
+
+				// Filtrar variantes sin inventario
+				const variantsWithoutInventory = [];
+
+				for (const variant of variants) {
+					// Obtener niveles de inventario para cada variante
+					const inventoryItemId = variant.inventory_item_id;
+
+					if (inventoryItemId) {
+						try {
+							const inventoryResp = await requestWithRetry(
+								async () => {
+									return await axios.get(
+										`https://${shopUrl}/admin/api/2024-10/inventory_levels.json?inventory_item_ids=${inventoryItemId}`,
+										{
+											headers: {
+												'X-Shopify-Access-Token':
+													process.env.SHOPIFY_ACCESS_TOKEN,
+												'Content-Type': 'application/json',
+											},
+										}
+									);
+								}
+							);
+
+							const inventoryLevels =
+								inventoryResp.data?.inventory_levels || [];
+
+							// Sumar inventario de todas las ubicaciones
+							const totalInventory = inventoryLevels.reduce(
+								(sum, level) => sum + (level.available || 0),
+								0
+							);
+
+							// Si no tiene inventario, agregarlo
+							if (totalInventory === 0) {
+								variantsWithoutInventory.push({
+									variant_id: variant.id,
+									sku: variant.sku,
+									title: variant.title,
+									price: variant.price,
+									inventory_quantity: totalInventory,
+								});
+							}
+
+							await sleep(DELAY_BETWEEN_REQUESTS);
+						} catch (invError) {
+							console.error(
+								`Error obteniendo inventario de variante ${variant.id}:`,
+								invError.message
+							);
+						}
+					}
+				}
+
+				// Si todas las variantes no tienen inventario, agregar el producto
+				if (
+					variantsWithoutInventory.length > 0 &&
+					variantsWithoutInventory.length === variants.length
+				) {
+					return {
+						shopify_id: productId,
+						title: product.title,
+						variants: variantsWithoutInventory,
+					};
+				}
+
+				return null;
+			} catch (error) {
+				console.error(
+					`Error verificando producto ${product.id}:`,
+					error.message
+				);
+				return null;
+			}
+		};
+
+		// Recorrer productos de la tienda
+		let hasNextPage = true;
+		let pageInfo = null;
+		let pageCount = 0;
+
+		while (hasNextPage) {
+			pageCount++;
+			console.log(`\nProcesando página ${pageCount}...`);
+
+			// Construir URL con paginación
+			let getProductsUrl = `https://${shopUrl}/admin/api/2024-10/products.json?limit=${PRODUCTS_PER_PAGE}&fields=id,title,status`;
+
+			if (pageInfo) {
+				getProductsUrl += `&page_info=${pageInfo}`;
+			}
+
+			try {
+				const productsResp = await requestWithRetry(async () => {
+					return await axios.get(getProductsUrl, {
+						headers: {
+							'X-Shopify-Access-Token':
+								process.env.SHOPIFY_ACCESS_TOKEN,
+							'Content-Type': 'application/json',
+						},
+					});
+				});
+
+				const products = productsResp.data?.products || [];
+				console.log(`  Productos en página: ${products.length}`);
+
+				if (products.length === 0) {
+					hasNextPage = false;
+					break;
+				}
+
+				// Verificar inventario de cada producto
+				for (const product of products) {
+					// Verificar si ya alcanzamos el límite
+					if (
+						maxProducts &&
+						productsWithoutInventory.length >= maxProducts
+					) {
+						console.log(
+							`\n✓ Límite de ${maxProducts} productos alcanzado`
+						);
+						hasNextPage = false;
+						break;
+					}
+
+					totalProcessed++;
+					console.log(
+						`  Verificando [${totalProcessed}]: ${product.title}`
+					);
+
+					const result = await checkProductInventory(product);
+
+					if (result) {
+						productsWithoutInventory.push(result);
+						console.log(
+							`    ✓ Sin inventario (${result.variants.length} variantes)`
+						);
+					}
+				}
+
+				// Verificar si hay más páginas
+				if (hasNextPage) {
+					const linkHeader = productsResp.headers['link'];
+					if (linkHeader && linkHeader.includes('rel="next"')) {
+						const nextMatch = linkHeader.match(
+							/<[^>]*[?&]page_info=([^>&]+)>;\s*rel="next"/
+						);
+						if (nextMatch) {
+							pageInfo = nextMatch[1];
+						} else {
+							hasNextPage = false;
+						}
+					} else {
+						hasNextPage = false;
+					}
+				}
+
+				await sleep(DELAY_BETWEEN_REQUESTS);
+			} catch (pageError) {
+				console.error('Error obteniendo página:', pageError.message);
+				hasNextPage = false;
+			}
+		}
+
+		console.log('\n=== BÚSQUEDA COMPLETADA ===');
+		console.log(`Productos procesados: ${totalProcessed}`);
+		console.log(
+			`Productos sin inventario: ${productsWithoutInventory.length}`
+		);
+
+		return res.json({
+			success: true,
+			cant: productsWithoutInventory.length,
+			products: productsWithoutInventory,
+		});
+	} catch (err) {
+		console.error('\n=== ERROR GENERAL ===');
+		console.error(err);
+		return res.status(500).json({
+			success: false,
+			error: err.message,
+			stack:
+				process.env.NODE_ENV === 'development'
+					? err.stack
+					: undefined,
+		});
+	}
+};
 module.exports = {
 	createProductsGraphQL,
 	updateVariantPricesGraphQL,
 	createProductWithMediaGraphQL,
+	deleteDefaultTitleVariants,
+	getProductsWithoutInventory,
 	deleteProductGraphQL,
 	updateVariantMedia,
 	updateVariant,
